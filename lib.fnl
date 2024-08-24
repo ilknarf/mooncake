@@ -1,8 +1,36 @@
-;; fnlfmt: skip
-(fn b [str] (: str :byte))
+;; mutual recursive helpers
+(local rec {})
+
+(fn b [str] (str:byte))
 
 (local tag-delims {(b ".") :class (b "#") :id})
 
+;; taken from https://developer.mozilla.org/en-US/docs/Glossary/Void_element
+;; fnlfmt: skip
+(local void-elements {
+                      :area true
+                      :base true
+                      :br true
+                      :col true
+                      :embed true
+                      :hr true
+                      :img true
+                      :input true
+                      :link true
+                      :meta true
+                      :param true
+                      :source true
+                      :track true
+                      :wbr true
+                      })
+
+(fn string? [v]
+  (= (type v) "string"))
+
+(fn table? [v]
+  (= (type v) "table"))
+
+;; TODO: remove
 ;; fnlfmt: skip
 (fn page [title]
        [:<>
@@ -27,13 +55,37 @@
         [:p :more]
         [:p :more]])
 
-(fn render-markup [{1 tag 2 maybe-attr &as all}])
+;; fnlfmt: skip
+(local escape-chars {
+                    "<" "&lt;"
+                    ">" "&gt;"
+                    "&" "&amp;"
+                    "'" "&#39;"
+                    "\"" "&#34;"
+                    })
 
+(fn escape-string [str]
+  (let [cur []]
+  (do
+    (for [i 1 (# str)]
+      (let [ch (str:sub i i )]
+        (table.insert cur (or (. escape-chars ch) ch))))
+    (table.concat cur ""))))
+
+;; TODO: something more robust?
+;; attr table should be length 0, compared to a markup table
+(fn attr-table? [tab]
+  (and tab (= 0 (# tab))))
+
+;; need to reference function in mod because of mutual recursion
 (fn render-element [tag-data all start]
   (let [cur []
         {:tag raw-tag :attr attr} tag-data
-        frag? (or (= raw-tag "<>") (= raw-tag "*"))]
+        frag? (or (= raw-tag "<>") (= raw-tag "*"))
+        void-el? (. void-elements raw-tag)]
     (do
+      (when (= "html" raw-tag)
+        (table.insert cur "<!DOCTYPE html"))
       (when (not frag?)
           (let [id (. attr :id)
                 class-list (. attr :class)]
@@ -45,18 +97,20 @@
                 (set open-tag (.. open-tag " class=\"" (table.concat class-list " ") "\"")))
               (set open-tag (.. open-tag ">"))
               (table.insert cur open-tag))))
-      (for [i start (+ (# all) 1)]
-        (let [el (. all i)]
-          (print)))
+      (when (not void-el?)
+        (for [i start (# all)]
+          (let [el (. all i)
+                children (if (string? el)
+                             [(escape-string el)]
+                             (table? el)
+                             (rec.render-markup- el)
+                             [(tostring el)])]
+            (each [_ child (pairs children)]
+              (table.insert cur (.. "\t" child))))))
       ;; insert closing tag
-      (when (not frag?)
+      (when (and (not frag?) (not void-el?))
         (table.insert cur (.. "</" raw-tag ">")))
-      (table.concat cur ""))))
-
-;; TODO: something more robust?
-;; attr table should be length 0, compared to a markup table
-(fn attr-table? [tab]
-  (= 0 (# tab)))
+      cur)))
 
 (fn add-class-tag [attr fld]
   (let [clname (fld:sub 2)]
@@ -78,7 +132,7 @@
       :id (set-id-tag attr fld)
       _ (tset tbl :tag fld))))
 
-(fn to-base-tag-and-classes [tag attr]
+(fn to-tag-data [tag attr]
   (do
     (let [parts (string.gmatch tag "[\\.#]?[^\\.#]+")
           res {: attr}]
@@ -86,7 +140,24 @@
       (while (let [fld (parts)]
                (when fld
                  (add-field res fld)
-               fld)))
+                 fld)))
+      (if (not (. res :tag))
+          (add-field res "div"))
       res)))
 
-{: page : render-markup : render-element : to-base-tag-and-classes : tag-delims}
+(fn render-markup- [{1 tag 2 maybe-attr &as all}]
+  (let [has-attr-table? (attr-table? maybe-attr)
+        body-start (if has-attr-table? 3 2)
+        attr (if has-attr-table?  maybe-attr {})
+        tag-data (to-tag-data tag attr)]
+    (rec.render-element tag-data all body-start)))
+
+(fn render-markup [body]
+  (table.concat (render-markup- body) "\n"))
+
+(tset rec :render-markup- render-markup-)
+(tset rec :render-element render-element)
+
+(local mod {: page : render-markup : render-element : to-tag-data : tag-delims})
+
+mod
