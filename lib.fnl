@@ -29,10 +29,39 @@
 
 (fn render-markup [{1 tag 2 maybe-attr &as all}])
 
+(fn render-element [tag-data all start]
+  (let [cur []
+        {:tag raw-tag :attr attr} tag-data
+        frag? (or (= raw-tag "<>") (= raw-tag "*"))]
+    (do
+      (when (not frag?)
+          (let [id (. attr :id)
+                class-list (. attr :class)]
+            (do
+              (var open-tag (.. "<" raw-tag))
+              (when id
+                (set open-tag (.. open-tag " id=\"" id "\"")))
+              (when class-list
+                (set open-tag (.. open-tag " class=\"" (table.concat class-list " ") "\"")))
+              (set open-tag (.. open-tag ">"))
+              (table.insert cur open-tag))))
+      (for [i start (+ (# all) 1)]
+        (let [el (. all i)]
+          (print)))
+      ;; insert closing tag
+      (when (not frag?)
+        (table.insert cur (.. "</" raw-tag ">")))
+      (table.concat cur ""))))
+
+;; TODO: something more robust?
+;; attr table should be length 0, compared to a markup table
+(fn attr-table? [tab]
+  (= 0 (# tab)))
+
 (fn add-class-tag [attr fld]
   (let [clname (fld:sub 2)]
     (do
-    (if (not (. attr :class))
+    (when (not (. attr :class))
         (tset attr :class []))
     (table.insert (. attr :class) clname))))
 
@@ -53,10 +82,11 @@
   (do
     (let [parts (string.gmatch tag "[\\.#]?[^\\.#]+")
           res {: attr}]
+      ;; loop through the iterator, adding all parts to the res table
       (while (let [fld (parts)]
                (when fld
                  (add-field res fld)
                fld)))
       res)))
 
-{: page : render-markup : to-base-tag-and-classes : tag-delims}
+{: page : render-markup : render-element : to-base-tag-and-classes : tag-delims}
