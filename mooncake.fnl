@@ -43,9 +43,9 @@
         [:p :more]
         [:p :more]
         [:div
-         [:p {:attr {
-                     :class "h-3"
-                     }} "this is nested"]
+         [:p.anotherclass {
+              :class "h-3"
+             }]
          [:p "this is also nested"]]
         [:p :more]
         [:p :more]
@@ -87,16 +87,14 @@
       (when (= "html" raw-tag)
         (table.insert cur "<!DOCTYPE html"))
       (when (not frag?)
-          (let [id (. attr :id)
-                class-list (. attr :class)]
-            (do
-              (var open-tag (.. "<" raw-tag))
-              (when id
-                (set open-tag (.. open-tag " id=\"" id "\"")))
-              (when class-list
-                (set open-tag (.. open-tag " class=\"" (table.concat class-list " ") "\"")))
-              (set open-tag (.. open-tag ">"))
-              (table.insert cur open-tag))))
+        (do
+          (var open-tag (.. "<" raw-tag))
+          (each [k v (pairs attr)]
+            (if (table? v)
+                (set open-tag (.. open-tag " " k "=\"" (table.concat v " ") "\""))
+                (set open-tag (.. open-tag " " k "=\"" (tostring v) "\""))))
+          (set open-tag (.. open-tag ">"))
+          (table.insert cur open-tag)))
       (when (not void-el?)
         (for [i start (# all)]
           (let [el (. all i)
@@ -113,10 +111,13 @@
       cur)))
 
 (fn add-class-tag [attr fld]
-  (let [clname (fld:sub 2)]
+  (let [clname (fld:sub 2)
+        class-val (. attr :class)]
     (do
-    (when (not (. attr :class))
-        (tset attr :class []))
+    (if (not class-val)
+        (tset attr :class [])
+        (not (= (type class-val) "table"))
+        (tset attr :class [class-val]))
     (table.insert (. attr :class) clname))))
 
 (fn set-id-tag [attr fld]
@@ -158,6 +159,7 @@
 (tset rec :render-markup- render-markup-)
 (tset rec :render-element render-element)
 
-(local mod {: page : render-markup : render-element : to-tag-data : tag-delims})
+;; TODO: remove test page
+(local mod {: page : render-markup })
 
 mod
